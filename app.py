@@ -151,8 +151,8 @@ def seo_analysis(percent):
 def _get_gemini_model():
     """
     Compat multi-versions:
-    - Certains SDK attendent "models/gemini-1.5-pro"
-    - D’autres acceptent "gemini-1.5-pro"
+    - Certains SDK attendent "models/gemini-2.5-pro"
+    - D’autres acceptent "gemini-2.5-pro"
     """
     if not GEMINI_AVAILABLE:
         raise RuntimeError("Lib Gemini non installée: google-generativeai")
@@ -161,15 +161,15 @@ def _get_gemini_model():
 
     # Essai 1
     try:
-        return genai.GenerativeModel("models/gemini-1.5-pro")
+        return genai.GenerativeModel("models/gemini-2.5-pro")
     except Exception:
         pass
 
     # Essai 2
     try:
-        return genai.GenerativeModel("gemini-1.5-pro")
+        return genai.GenerativeModel("gemini-2.5-pro")
     except Exception as e:
-        raise RuntimeError(f"Impossible d’initialiser Gemini 1.5 Pro: {e}")
+        raise RuntimeError(f"Impossible d’initialiser Gemini 2.5 Pro: {e}")
 
 def rewrite_with_gemini(text, keyword):
     model = _get_gemini_model()
@@ -248,7 +248,7 @@ else:
 st.divider()
 
 enable_rewrite = st.checkbox(
-    "Proposer une reformulation via Gemini 1.5 Pro si la similarité est faible",
+    "Proposer une reformulation via Gemini 2.5 Pro si la similarité est faible",
     value=True,
     help="Nécessite GEMINI_API_KEY et le package google-generativeai"
 )
