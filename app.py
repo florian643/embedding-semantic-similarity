@@ -3,6 +3,7 @@ import numpy as np
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
+import google.generativeai as genai
 import os
 
 # =========================
@@ -38,14 +39,14 @@ def check_password():
     return True
 
 
-# Bloque toute l’app si le mot de passe est faux
 if not check_password():
     st.stop()
 
 # =========================
-# Configuration OpenAI
+# Configuration API
 # =========================
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # =========================
 # Fonctions internes
@@ -122,6 +123,34 @@ def seo_analysis(percent):
         ]
     )
 
+def rewrite_with_gemini(text, keyword):
+    model = genai.GenerativeModel("gemini-pro")
+
+    prompt = f"""
+Tu es un assistant spécialisé en optimisation sémantique SEO.
+
+Objectif :
+Réécrire le texte ci-dessous afin d’augmenter sa proximité sémantique
+avec le mot-clé cible, sans modifier l’intention, le ton ni le niveau de détail.
+
+Contraintes :
+- Ne pas ajouter d’informations nouvelles
+- Ne pas rallonger significativement le texte
+- Ne pas faire de keyword stuffing
+- Rester naturel et fluide
+
+Mot-clé cible :
+"{keyword}"
+
+Texte à améliorer :
+\"\"\"{text}\"\"\"
+
+Fournis uniquement la version réécrite du texte.
+"""
+
+    response = model.generate_content(prompt)
+    return response.text.strip()
+
 # =========================
 # Interface Streamlit
 # =========================
@@ -163,6 +192,21 @@ else:
 
 st.divider()
 
+enable_rewrite = st.checkbox(
+    "Proposer une reformulation si la similarité est faible",
+    value=True
+)
+
+rewrite_threshold = st.slider(
+    "Seuil de similarité (%)",
+    min_value=40,
+    max_value=80,
+    value=65,
+    step=5
+)
+
+st.divider()
+
 if st.button("Analyser la similarité"):
     if not keyword:
         st.error("Merci de renseigner un mot-clé")
@@ -187,6 +231,15 @@ if st.button("Analyser la similarité"):
 
             niveau, diagnostic, recommandations = seo_analysis(percent)
 
+            rewritten_text = None
+            new_percent = None
+
+            if enable_rewrite and percent < rewrite_threshold:
+                rewritten_text = rewrite_with_gemini(page_text, keyword)
+                emb_rewritten = get_embedding(rewritten_text)
+                new_score = cosine_similarity(emb_keyword, emb_rewritten)
+                new_percent = new_score * 100
+
         st.subheader("Résultat")
         st.metric("Similarité sémantique", f"{percent:.2f}%")
 
@@ -197,3 +250,19 @@ if st.button("Analyser la similarité"):
         st.subheader("Recommandations")
         for reco in recommandations:
             st.write(f"- {reco}")
+
+        if rewritten_text:
+            st.divider()
+            st.subheader("Proposition de reformulation")
+
+            st.metric(
+                "Nouvelle similarité sémantique",
+                f"{new_percent:.2f}%",
+                delta=f"{(new_percent - percent):.2f}%"
+            )
+
+            st.text_area(
+                "Texte reformulé",
+                rewritten_text,
+                height=240
+            )
