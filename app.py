@@ -76,9 +76,34 @@ def cosine_similarity(vec1, vec2):
 
 
 def extract_text_from_url(url, max_chars=12000):
-    headers = {"User-Agent": "Mozilla/5.0"}
-    r = requests.get(url, headers=headers, timeout=20)
-    r.raise_for_status()
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/120.0.0.0 Safari/537.36"
+        )
+    }
+
+    try:
+        r = requests.get(
+            url,
+            headers=headers,
+            timeout=30,
+            allow_redirects=True
+        )
+        r.raise_for_status()
+
+    except requests.exceptions.ReadTimeout:
+        raise RuntimeError(
+            "La page met trop de temps à répondre. "
+            "Essayez avec une autre URL ou copiez le contenu en texte."
+        )
+
+    except requests.exceptions.RequestException as e:
+        raise RuntimeError(
+            f"Impossible de récupérer la page ({e}). "
+            "Essayez avec une autre URL."
+        )
 
     soup = BeautifulSoup(r.text, "html.parser")
 
@@ -87,7 +112,15 @@ def extract_text_from_url(url, max_chars=12000):
 
     text = soup.get_text(separator=" ")
     text = " ".join(text.split())
+
+    if not text:
+        raise RuntimeError(
+            "Le contenu de la page n’a pas pu être extrait. "
+            "Copiez le texte manuellement."
+        )
+
     return text[:max_chars]
+
 
 
 def seo_analysis(percent):
