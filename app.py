@@ -124,9 +124,10 @@ def seo_analysis(percent):
     )
 
 def rewrite_with_gemini(text, keyword):
-    model = genai.GenerativeModel("gemini-pro")
+    try:
+        model = genai.GenerativeModel("models/gemini-1.5-pro")
 
-    prompt = f"""
+        prompt = f"""
 Tu es un assistant spécialisé en optimisation sémantique SEO.
 
 Objectif :
@@ -148,8 +149,17 @@ Texte à améliorer :
 Fournis uniquement la version réécrite du texte.
 """
 
-    response = model.generate_content(prompt)
-    return response.text.strip()
+        response = model.generate_content(prompt)
+
+        if not response or not response.text:
+            st.warning("Gemini n’a retourné aucun contenu")
+            return None
+
+        return response.text.strip()
+
+    except Exception as e:
+        st.error(f"Erreur Gemini : {e}")
+        return None
 
 # =========================
 # Interface Streamlit
@@ -235,34 +245,5 @@ if st.button("Analyser la similarité"):
             new_percent = None
 
             if enable_rewrite and percent < rewrite_threshold:
-                rewritten_text = rewrite_with_gemini(page_text, keyword)
-                emb_rewritten = get_embedding(rewritten_text)
-                new_score = cosine_similarity(emb_keyword, emb_rewritten)
-                new_percent = new_score * 100
-
-        st.subheader("Résultat")
-        st.metric("Similarité sémantique", f"{percent:.2f}%")
-
-        st.subheader("Analyse SEO")
-        st.write(f"**Niveau :** {niveau}")
-        st.write(f"**Diagnostic :** {diagnostic}")
-
-        st.subheader("Recommandations")
-        for reco in recommandations:
-            st.write(f"- {reco}")
-
-        if rewritten_text:
-            st.divider()
-            st.subheader("Proposition de reformulation")
-
-            st.metric(
-                "Nouvelle similarité sémantique",
-                f"{new_percent:.2f}%",
-                delta=f"{(new_percent - percent):.2f}%"
-            )
-
-            st.text_area(
-                "Texte reformulé",
-                rewritten_text,
-                height=240
-            )
+                st.info(
+                    f"Similarité sous le seuil ({percent:.2f}% < {rewrite_threshold}%), reformulation déclenchée"
