@@ -126,11 +126,11 @@ def seo_analysis(percent):
 # Interface Streamlit
 # =========================
 st.set_page_config(
-    page_title="Analyse de similarité sémantique",
+    page_title="Embedding : Analyse de similarité sémantique",
     layout="centered"
 )
 
-st.title("Analyse de similarité sémantique")
+st.title("Embedding :Analyse de similarité sémantique")
 st.caption("Outil interne Digitad")
 
 st.markdown("Comparer un mot-clé avec une page web ou un contenu texte.")
