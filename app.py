@@ -130,7 +130,7 @@ st.set_page_config(
     layout="centered"
 )
 
-st.title("Embedding :Analyse de similarité sémantique")
+st.title("Embedding : Analyse de similarité sémantique")
 st.caption("Outil interne Digitad")
 
 st.markdown("Comparer un mot-clé avec une page web ou un contenu texte.")
