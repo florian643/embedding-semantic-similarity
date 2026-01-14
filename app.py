@@ -127,27 +127,21 @@ def rewrite_with_gemini(text, keyword):
     try:
         model = genai.GenerativeModel("models/gemini-1.5-pro")
 
-        prompt = f"""
-Tu es un assistant spécialisé en optimisation sémantique SEO.
-
-Objectif :
-Réécrire le texte ci-dessous afin d’augmenter sa proximité sémantique
-avec le mot-clé cible, sans modifier l’intention, le ton ni le niveau de détail.
-
-Contraintes :
-- Ne pas ajouter d’informations nouvelles
-- Ne pas rallonger significativement le texte
-- Ne pas faire de keyword stuffing
-- Rester naturel et fluide
-
-Mot-clé cible :
-"{keyword}"
-
-Texte à améliorer :
-\"\"\"{text}\"\"\"
-
-Fournis uniquement la version réécrite du texte.
-"""
+        prompt = (
+            "Tu es un assistant spécialisé en optimisation sémantique SEO.\n\n"
+            "Objectif :\n"
+            "Réécrire le texte ci-dessous afin d’augmenter sa proximité sémantique "
+            "avec le mot-clé cible, sans modifier l’intention, le ton ni le niveau de détail.\n\n"
+            "Contraintes :\n"
+            "- Ne pas ajouter d’informations nouvelles\n"
+            "- Ne pas rallonger significativement le texte\n"
+            "- Ne pas faire de keyword stuffing\n"
+            "- Rester naturel et fluide\n\n"
+            f"Mot-clé cible : {keyword}\n\n"
+            "Texte à améliorer :\n"
+            f"{text}\n\n"
+            "Fournis uniquement la version réécrite du texte."
+        )
 
         response = model.generate_content(prompt)
 
@@ -160,6 +154,7 @@ Fournis uniquement la version réécrite du texte.
     except Exception as e:
         st.error(f"Erreur Gemini : {e}")
         return None
+
 
 # =========================
 # Interface Streamlit
