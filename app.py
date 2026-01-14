@@ -5,14 +5,6 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 import os
 
-# Gemini (Google Generative AI)
-try:
-    import google.generativeai as genai
-    GEMINI_AVAILABLE = True
-except Exception:
-    GEMINI_AVAILABLE = False
-    genai = None
-
 # =========================
 # Sécurité - mot de passe
 # =========================
@@ -51,19 +43,15 @@ if not check_password():
     st.stop()
 
 # =========================
-# Configuration API
+# Configuration OpenAI
 # =========================
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not OPENAI_API_KEY:
     st.error("OPENAI_API_KEY manquante dans les variables d’environnement")
     st.stop()
 
 client = OpenAI(api_key=OPENAI_API_KEY)
-
-if GEMINI_AVAILABLE and GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
 
 # =========================
 # Fonctions internes
@@ -72,21 +60,20 @@ def get_embedding(text, model="text-embedding-3-large"):
     text = (text or "").replace("\n", " ").strip()
     if not text:
         return np.zeros(1, dtype=float)
+
     response = client.embeddings.create(
         model=model,
         input=text
     )
     return np.array(response.data[0].embedding, dtype=float)
 
+
 def cosine_similarity(vec1, vec2):
-    if vec1 is None or vec2 is None:
-        return 0.0
-    if vec1.size == 1 and vec1[0] == 0 and vec2.size == 1 and vec2[0] == 0:
-        return 0.0
-    denom = (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+    denom = np.linalg.norm(vec1) * np.linalg.norm(vec2)
     if denom == 0:
         return 0.0
     return float(np.dot(vec1, vec2) / denom)
+
 
 def extract_text_from_url(url, max_chars=12000):
     headers = {"User-Agent": "Mozilla/5.0"}
@@ -101,6 +88,7 @@ def extract_text_from_url(url, max_chars=12000):
     text = soup.get_text(separator=" ")
     text = " ".join(text.split())
     return text[:max_chars]
+
 
 def seo_analysis(percent):
     if percent < 40:
@@ -148,36 +136,9 @@ def seo_analysis(percent):
         ]
     )
 
-def _get_gemini_model():
-    """
-    Compat multi-versions:
-    - Certains SDK attendent "models/gemini-2.5-pro"
-    - D’autres acceptent "gemini-2.5-pro"
-    """
-    if not GEMINI_AVAILABLE:
-        raise RuntimeError("Lib Gemini non installée: google-generativeai")
-    if not GEMINI_API_KEY:
-        raise RuntimeError("GEMINI_API_KEY manquante dans les variables d’environnement")
 
-    # Essai 1
-    try:
-        return genai.GenerativeModel("models/gemini-2.5-pro")
-    except Exception:
-        pass
-
-    # Essai 2
-    try:
-        return genai.GenerativeModel("gemini-2.5-pro")
-    except Exception as e:
-        raise RuntimeError(f"Impossible d’initialiser Gemini 2.5 Pro: {e}")
-
-def rewrite_with_gemini(text, keyword):
-    model = _get_gemini_model()
-
-    safe_text = (text or "").strip()
-    safe_keyword = (keyword or "").strip()
-
-    if not safe_text:
+def rewrite_with_openai(text, keyword):
+    if not text or not keyword:
         return None
 
     prompt = (
@@ -190,22 +151,23 @@ def rewrite_with_gemini(text, keyword):
         "- Ne pas rallonger significativement le texte\n"
         "- Ne pas faire de keyword stuffing\n"
         "- Rester naturel et fluide\n\n"
-        f"Mot-clé cible: {safe_keyword}\n\n"
+        f"Mot-clé cible: {keyword}\n\n"
         "Texte à améliorer:\n"
-        f"{safe_text}\n\n"
+        f"{text}\n\n"
         "Fournis uniquement la version réécrite du texte."
     )
 
-    response = model.generate_content(prompt)
+    response = client.chat.completions.create(
+        model="gpt-5.2",
+        messages=[
+            {"role": "system", "content": "Assistant expert en optimisation sémantique SEO."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.4
+    )
 
-    out = None
-    if response is not None:
-        out = getattr(response, "text", None)
-
-    if not out or not str(out).strip():
-        return None
-
-    return str(out).strip()
+    content = response.choices[0].message.content
+    return content.strip() if content else None
 
 # =========================
 # Interface Streamlit
@@ -248,9 +210,8 @@ else:
 st.divider()
 
 enable_rewrite = st.checkbox(
-    "Proposer une reformulation via Gemini 2.5 Pro si la similarité est faible",
-    value=True,
-    help="Nécessite GEMINI_API_KEY et le package google-generativeai"
+    "Proposer une reformulation via ChatGPT 5.2 si la similarité est faible",
+    value=True
 )
 
 rewrite_threshold = st.slider(
@@ -279,11 +240,7 @@ if st.button("Analyser la similarité"):
             if not url:
                 st.error("Merci de renseigner une URL")
                 st.stop()
-            try:
-                page_text = extract_text_from_url(url)
-            except Exception as e:
-                st.error(f"Impossible de récupérer la page: {e}")
-                st.stop()
+            page_text = extract_text_from_url(url)
         else:
             if not text_content:
                 st.error("Merci de coller un contenu texte")
@@ -300,22 +257,16 @@ if st.button("Analyser la similarité"):
 
         rewritten_text = None
         new_percent = None
-        rewrite_error = None
 
-        should_rewrite = bool(enable_rewrite and percent < float(rewrite_threshold))
-
-        if should_rewrite:
+        if enable_rewrite and percent < rewrite_threshold:
             st.info(f"Similarité sous le seuil ({percent:.2f}% < {rewrite_threshold}%), reformulation déclenchée")
-            try:
-                rewritten_text = rewrite_with_gemini(page_text, keyword)
-                if rewritten_text:
-                    emb_rewritten = get_embedding(rewritten_text, model=embedding_model)
-                    new_score = cosine_similarity(emb_keyword, emb_rewritten)
-                    new_percent = new_score * 100.0
-                else:
-                    rewrite_error = "Gemini n’a retourné aucun contenu"
-            except Exception as e:
-                rewrite_error = str(e)
+
+            rewritten_text = rewrite_with_openai(page_text, keyword)
+
+            if rewritten_text:
+                emb_rewritten = get_embedding(rewritten_text, model=embedding_model)
+                new_score = cosine_similarity(emb_keyword, emb_rewritten)
+                new_percent = new_score * 100.0
 
     st.subheader("Résultat")
     st.metric("Similarité sémantique", f"{percent:.2f}%")
@@ -328,25 +279,18 @@ if st.button("Analyser la similarité"):
     for reco in recommandations:
         st.write(f"- {reco}")
 
-    if should_rewrite:
-        if rewrite_error:
-            st.warning(f"Reformulation non disponible: {rewrite_error}")
-            if not GEMINI_AVAILABLE:
-                st.caption("Installe: pip install google-generativeai")
-            if not GEMINI_API_KEY:
-                st.caption("Ajoute GEMINI_API_KEY dans les variables d’environnement")
-        elif rewritten_text:
-            st.divider()
-            st.subheader("Proposition de reformulation")
+    if rewritten_text:
+        st.divider()
+        st.subheader("Proposition de reformulation")
 
-            st.metric(
-                "Nouvelle similarité sémantique",
-                f"{new_percent:.2f}%",
-                delta=f"{(new_percent - percent):.2f}%"
-            )
+        st.metric(
+            "Nouvelle similarité sémantique",
+            f"{new_percent:.2f}%",
+            delta=f"{(new_percent - percent):.2f}%"
+        )
 
-            st.text_area(
-                "Texte reformulé",
-                rewritten_text,
-                height=240
-            )
+        st.text_area(
+            "Texte reformulé",
+            rewritten_text,
+            height=240
+        )
